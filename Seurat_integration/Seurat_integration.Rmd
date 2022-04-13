@@ -1,0 +1,49 @@
+---
+title: "Integration pipeline"
+author: "Juechen Yang"
+date: "4/13/2022"
+output: rmarkdown::github_document
+---
+
+# load libraries
+```{r warning=FALSE, message=FALSE}
+library(Seurat)
+library(SeuratData)
+library(patchwork)
+LoadData("ifnb")
+```
+
+# learn FindVariableFeatures
+
+## create object data for convenience
+```{r}
+ifnb.list <- SplitObject(ifnb, split.by = "stim")
+object = ifnb.list[[1]]
+#normalization
+object = NormalizeData(object = object, verbose = F)
+```
+
+## get assay data for object
+
+Because FindVariableFeatures needs the count matrix for input, so it is required to fetch the assay data from the Seurat object for downstream calculation
+
+```{r}
+object = GetAssayData(object)
+#initializa verbose
+verbose = FALSE
+```
+
+## computes the mean and variance for each row(gene)
+
+```{r warning=FALSE, message=FALSE}
+SparseRowVar2 <- function(mat, mu, display_progress) {
+    .Call('_Seurat_SparseRowVar2', PACKAGE = 'Seurat', mat, mu, display_progress)
+}
+hvf.info <- data.frame(mean = rowMeans(x = object))
+hvf.info$variance <- SparseRowVar2(mat = object, mu = hvf.info$mean, 
+                      display_progress = verbose)
+hvf.info[1:10,]
+```
+
+
+
