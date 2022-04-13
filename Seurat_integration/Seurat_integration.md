@@ -124,6 +124,18 @@ top.genes[1:20]
 
 ## initializa parameters and preprocess
 
+``` r
+ifnb.list <- lapply(X = ifnb.list, FUN = function(x) {
+  x <- NormalizeData(x)
+  x <- FindVariableFeatures(x, selection.method = "vst", nfeatures = 2000)
+})
+nfeatures = 2000
+assay = NULL
+verbose = TRUE
+fvf.nfeatures = 2000
+object.list = ifnb.list
+```
+
 ## assign assays to each obj in the list
 
 ``` r

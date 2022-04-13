@@ -95,7 +95,7 @@ top.genes[1:20]
 # learn SelectIntegrationFeatures
 
 ## initializa parameters and preprocess
-```{r include=FALSE}
+```{r warning=FALSE}
 ifnb.list <- lapply(X = ifnb.list, FUN = function(x) {
   x <- NormalizeData(x)
   x <- FindVariableFeatures(x, selection.method = "vst", nfeatures = 2000)
