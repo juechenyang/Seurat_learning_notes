@@ -10,6 +10,7 @@ output: rmarkdown::github_document
 library(Seurat)
 library(SeuratData)
 library(patchwork)
+#InstallData("ifnb")
 LoadData("ifnb")
 ```
 
@@ -18,6 +19,10 @@ LoadData("ifnb")
 ## create object data for convenience
 ```{r}
 ifnb.list <- SplitObject(ifnb, split.by = "stim")
+ifnb.list <- lapply(X = ifnb.list, FUN = function(x) {
+  x <- NormalizeData(x)
+  x <- FindVariableFeatures(x, selection.method = "vst", nfeatures = 2000)
+})
 object = ifnb.list[[1]]
 #normalization
 object = NormalizeData(object = object, verbose = F)
@@ -94,12 +99,13 @@ top.genes[1:20]
 
 # learn SelectIntegrationFeatures
 
+```{r}
+features <- SelectIntegrationFeatures(object.list = ifnb.list)
+```
+
 ## initializa parameters and preprocess
 ```{r warning=FALSE}
-ifnb.list <- lapply(X = ifnb.list, FUN = function(x) {
-  x <- NormalizeData(x)
-  x <- FindVariableFeatures(x, selection.method = "vst", nfeatures = 2000)
-})
+
 nfeatures = 2000
 assay = NULL
 verbose = TRUE
@@ -168,5 +174,164 @@ features <- names(x = var.features[which(x = var.features >
 length(features)
 features[1:20]
 ```
+
+## fetch variable features for each dataset
+
+```{r}
+vf.list <- lapply(X = object.list, FUN = VariableFeatures)
+vf.list[[1]][1:10]
+```
+
+## re-rank features based on their median rank for all vairable gene set from each dataset 
+
+```{r}
+#features are genes that shared by more than tie.val datasets
+if (length(x = features) > 0) {
+  feature.ranks <- sapply(X = features, FUN = function(x) {
+    ranks <- sapply(X = vf.list, FUN = function(vf) {
+      if (x %in% vf) {
+        return(which(x = x == vf))
+      }
+      return(NULL)
+    })
+    median(x = unlist(x = ranks))
+  })
+  features <- names(x = sort(x = feature.ranks))
+}
+```
+
+## grab the features that equal to tie.val
+
+```{r}
+features.tie <- var.features[which(x = var.features == tie.val)]
+```
+
+## do the same re-rank for tie features
+
+```{r}
+tie.ranks <- sapply(X = names(x = features.tie), FUN = function(x) {
+  ranks <- sapply(X = vf.list, FUN = function(vf) {
+    if (x %in% vf) {
+      return(which(x = x == vf))
+    }
+    return(NULL)
+  })
+  median(x = unlist(x = ranks))
+})
+```
+
+## return a vector with features in the front and tie.features in the back
+
+```{r}
+features <- c(features, names(x = head(x = sort(x = tie.ranks), 
+    nfeatures - length(x = features))))
+```
+
+# learn FindIntegrationAnchors
+
+```{r include=FALSE}
+#immune.anchors <- FindIntegrationAnchors(object.list = ifnb.list, anchor.features = features)
+```
+
+## initailiza parameters
+
+```{r}
+object.list = ifnb.list
+assay = NULL
+reference = NULL 
+anchor.features = features
+scale = TRUE
+normalization.method = c("LogNormalize", "SCT")
+sct.clip.range = NULL
+reduction = c("cca", "rpca", "rlsi")
+l2.norm = TRUE
+dims = 1:30
+k.anchor = 5 
+k.filter = 200
+k.score = 30
+max.features = 200
+nn.method = "annoy" 
+n.trees = 50
+eps = 0
+verbose = FALSE
+```
+
+## finalized methods
+```{r}
+normalization.method <- normalization.method[1]
+reduction <- reduction[1]
+```
+
+## define a future function
+```{r}
+library("future.apply")
+my.lapply <- ifelse(test = verbose && nbrOfWorkers() == 
+    1, yes = pblapply, no = future_lapply)
+```
+
+## get number of cells for each dataset
+
+```{r}
+object.ncells <- sapply(X = object.list, FUN = function(x) dim(x = x)[2])
+```
+
+## get default assay for each dataset
+```{r}
+assay <- sapply(X = object.list, FUN = DefaultAssay)
+```
+
+## check duplicate cell names
+```{r}
+# initialize slot tools for Integration
+object.list <- lapply(X = object.list, FUN = function(obj) {
+  slot(object = obj, name = "tools")$Integration <- NULL
+  return(obj)
+})
+# check duplicate cell names
+CheckDuplicateCellNames <- function(object.list, verbose = TRUE, stop = FALSE) {
+  cell.names <- unlist(x = lapply(X = object.list, FUN = colnames))
+  if (any(duplicated(x = cell.names))) {
+    if (stop) {
+      stop("Duplicate cell names present across objects provided.")
+    }
+    if (verbose) {
+      warning("Some cell names are duplicated across objects provided. Renaming to enforce unique cell names.")
+    }
+    object.list <- lapply(
+      X = 1:length(x = object.list),
+      FUN = function(x) {
+        return(RenameCells(
+          object = object.list[[x]],
+          new.names = paste0(Cells(x = object.list[[x]]), "_", x)
+        ))
+      }
+    )
+  }
+  return(object.list)
+}
+object.list <- CheckDuplicateCellNames(object.list = object.list)
+```
+
+## scale data for only those selected features for integration
+```{r}
+slot <- "data"
+object.list <- my.lapply(X = object.list, FUN = function(object){
+  ScaleData(object = object, features = anchor.features, 
+    verbose = FALSE)
+})
+nn.reduction <- reduction
+internal.neighbors <- list()
+```
+
+## build combinations
+```{r}
+combinations <- expand.grid(1:length(x = object.list), 1:length(x = object.list))
+combinations <- combinations[combinations$Var1 < combinations$Var2, 
+    , drop = FALSE]
+```
+
+
+
+
 
 
