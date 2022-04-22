@@ -330,6 +330,17 @@ combinations <- combinations[combinations$Var1 < combinations$Var2,
     , drop = FALSE]
 ```
 
+## get cumulative number of cells without last dataset
+```{r}
+objects.ncell <- sapply(X = object.list, FUN = ncol)
+offsets <- as.vector(x = cumsum(x = c(0, objects.ncell)))[1:length(x = object.list)]
+```
+
+## create diet seurat obj
+```{r}
+
+```
+
 
 
 
